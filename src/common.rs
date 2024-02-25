@@ -1,14 +1,28 @@
+use crate::driver_125khz::MAX_BUFFER_SIZE;
 pub trait Common {
-    fn compute_checksum(&self, data: &mut [u8], cs_byte: u8) -> () {
+    fn _compute_checksum(&self, data: &mut [u8]) -> u8 {
         let mut cs = 0;
-        for i in 0..data.len() {
-            if i < 3 {
-                continue;
-            } else {
-                cs ^= data[i]
-            }
+
+        for i in 3..data.len() {
+            // Device wants checksum all bytes starts from address byte
+            cs ^= data[i]
         }
+        cs
+    }
+
+    fn compute_checksum(&self, data: &mut [u8], cs_byte: u8) -> () {
+        let cs = self._compute_checksum(data);
         data[cs_byte as usize] = cs;
     }
     fn write_command(&mut self) -> () {}
+}
+
+pub trait DriverProperty {
+    fn set_command(&mut self, vector: Vec<u8>);
+    fn get_command(&mut self) -> &mut Vec<u8>;
+    fn set_read_char(&mut self, read_char: u8);
+    fn get_read_char(&self) -> u8;
+    fn set_buffer(&mut self, buffer: [u8; MAX_BUFFER_SIZE]);
+    fn get_buffer(&self) -> &[u8; MAX_BUFFER_SIZE];
+    fn get_t5577_id(&self) -> &[u8];
 }
