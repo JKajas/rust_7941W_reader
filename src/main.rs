@@ -1,14 +1,17 @@
 mod common;
 mod driver_125khz;
+mod driver_nfc;
 mod tests;
 
 use common::Common;
 use driver_125khz::*;
+use driver_nfc::*;
 use rpi_embedded::uart::{Parity, Uart};
 use std::io::{stdin, stdout, Write};
 
 #[repr(u8)]
 enum Commands {
+    ReadNFCId = 48,
     ReadId = 53,
     WriteId = 54,
     PrintTag = 55,
@@ -40,6 +43,7 @@ fn main() {
                 c if c == Commands::ReadId as u8 => driver.get_125khz_tag_id(),
                 _ => continue,
             };
+        } else {
         }
     }
 }

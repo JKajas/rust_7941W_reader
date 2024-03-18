@@ -30,7 +30,7 @@ impl<'a> DriverProperty for Driver125khz<'a> {
     fn get_buffer(&self) -> &[u8; MAX_BUFFER_SIZE] {
         &self.buffer
     }
-    fn get_t5577_id(&self) -> &[u8] {
+    fn get_tag_id(&self) -> &[u8] {
         &self.buffer[..self.read_char as usize]
     }
 }
@@ -77,8 +77,10 @@ pub trait DriverFunc: Common + DriverProperty {
         if buffer[3] == 0x80 {
             println!("Reading operation failed");
             self.set_buffer([0u8; MAX_BUFFER_SIZE]);
+
             return;
-        } else if buffer[4] + 5 >= 14 {
+        }
+        if buffer[4] + 5 >= 14 {
             self.set_read_char(8);
             println!("Data was to long to write to T5577, program will store only 8 byte of data");
         } else {
@@ -92,6 +94,6 @@ pub trait DriverFunc: Common + DriverProperty {
         println!("Result {:?} in memory", self.get_buffer());
     }
     fn print_t5577_tag(&self) -> () {
-        println!("{:x?}", self.get_t5577_id());
+        println!("{:x?}", self.get_tag_id());
     }
 }

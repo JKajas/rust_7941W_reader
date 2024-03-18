@@ -35,7 +35,7 @@ mod driver125khz {
         fn get_buffer(&self) -> &[u8; MAX_BUFFER_SIZE] {
             &self.buffer
         }
-        fn get_t5577_id(&self) -> &[u8] {
+        fn get_tag_id(&self) -> &[u8] {
             &self.buffer[..self.read_char as usize]
         }
     }
@@ -148,5 +148,197 @@ mod driver125khz {
             ),
             println!("{:x?}", [0x12, 0x14, 0xa1, 0x33])
         )
+    }
+}
+#[cfg(test)]
+mod driver_nfc {
+
+    use crate::common::{Common, DriverNFCProperty};
+    use crate::driver_nfc::{DriverFunc, GroupPwd, MAX_BUFFER_SIZE};
+    struct TestDriver {
+        buffer: [u8; MAX_BUFFER_SIZE],
+        read_char: u8,
+        command: Vec<u8>,
+        uid: [u8; 4],
+        sector_data: [u8; 16],
+        a_pwd: [u8; 6],
+        b_pwd: [u8; 6],
+    }
+    impl TestDriver {
+        fn new(a_pwd: [u8; 6], b_pwd: [u8; 6]) -> Self {
+            Self {
+                a_pwd,
+                b_pwd,
+                buffer: [0u8; MAX_BUFFER_SIZE],
+                read_char: 0,
+                command: Vec::new(),
+                sector_data: [0u8; 16],
+                uid: [0u8; 4],
+            }
+        }
+    }
+    impl DriverNFCProperty for TestDriver {
+        fn set_command(&mut self, vector: Vec<u8>) {
+            self.command = vector;
+        }
+        fn set_read_char(&mut self, read_char: u8) {
+            self.read_char = read_char;
+        }
+        fn set_buffer(&mut self, buffer: [u8; MAX_BUFFER_SIZE]) {
+            self.buffer = buffer;
+        }
+        fn get_read_char(&self) -> u8 {
+            self.read_char
+        }
+        fn get_command(&mut self) -> &mut Vec<u8> {
+            &mut self.command
+        }
+        fn get_tag_id(&self) -> &[u8] {
+            &self.uid
+        }
+        fn get_buffer(&self) -> &[u8; MAX_BUFFER_SIZE] {
+            &self.buffer
+        }
+        fn get_a_pwd(&self) -> ([u8; 6], u8) {
+            (self.a_pwd, 0x0a)
+        }
+        fn get_b_pwd(&self) -> ([u8; 6], u8) {
+            (self.b_pwd, 0x0b)
+        }
+    }
+    impl Common for TestDriver {
+        fn write_command(&mut self) {}
+    }
+    impl DriverFunc for TestDriver {}
+    const A_PWD: [u8; 6] = [0u8; 6];
+    const B_PWD: [u8; 6] = [0u8; 6];
+
+    #[test]
+    fn test_prepare_read_uid_request() -> () {
+        let mut driver = TestDriver::new(A_PWD, B_PWD);
+        driver.prepare_read_uid_request();
+        assert_eq!(driver.get_command(), &[0xab, 0xba, 0x00, 0x10, 0x00, 0x10]);
+    }
+    #[test]
+    fn test_prepare_write_uid_request() -> () {
+        let mut driver = TestDriver::new(A_PWD, B_PWD);
+        let mut testing_data = [0xab, 0xba, 0x00, 0x11, 0x04, 0x01, 0x02, 0x03, 0x04, 0x00];
+        let len = testing_data.len() - 1;
+        driver.prepare_write_uid_request([0x01, 0x02, 0x03, 0x04]);
+        driver.compute_checksum(&mut testing_data, len as u8);
+        assert_eq!(driver.get_command(), &testing_data);
+    }
+    #[test]
+    fn test_prepare_read_specified_sector() -> () {
+        let mut driver = TestDriver::new(A_PWD, B_PWD);
+        let sector_number = 0;
+        let block_number = 1;
+        let mut testing_data = [
+            0xab,
+            0xba,
+            0x00,
+            0x12,
+            0x09,
+            sector_number,
+            block_number,
+            0x0a,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+        ];
+        let len = testing_data.len() - 1;
+        driver.compute_checksum(&mut testing_data, len as u8);
+        driver.prepare_read_specified_sector(sector_number, block_number, GroupPwd::APassword);
+        assert_eq!(driver.get_command(), &testing_data);
+    }
+    #[test]
+    fn test_prepare_write_specified_sector() -> () {
+        let mut driver = TestDriver::new(A_PWD, B_PWD);
+        let sector_number = 0;
+        let block_number = 1;
+        let mut testing_data = [
+            0xab,
+            0xba,
+            0x00,
+            0x13,
+            0x19,
+            sector_number,
+            block_number,
+            0x0a,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            0x02,
+            0x03,
+            0x04,
+            0x05,
+            0x06,
+            0x07,
+            0x08,
+            0x09,
+            0x0a,
+            0x0b,
+            0x0c,
+            0x0d,
+            0x0e,
+            0x10,
+            0x00,
+        ];
+        let len = testing_data.len() - 1;
+        driver.compute_checksum(&mut testing_data, len as u8);
+        driver.prepare_write_specified_sector(
+            sector_number,
+            block_number,
+            GroupPwd::APassword,
+            [
+                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                0x0e, 0x10,
+            ],
+        );
+        assert_eq!(driver.get_command(), &testing_data);
+    }
+    #[test]
+    fn test_prepare_modify_password() -> () {
+        let mut driver = TestDriver::new(A_PWD, B_PWD);
+        let sector_number = 0;
+        let mut testing_data = [
+            0xab,
+            0xba,
+            0x00,
+            0x14,
+            0x0d,
+            sector_number,
+            0x0a,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            0x02,
+            0x03,
+            0x04,
+            0x05,
+            0x06,
+            0x00,
+        ];
+        let len = testing_data.len() - 1;
+        driver.compute_checksum(&mut testing_data, len as u8);
+        driver.prepare_modify_password(
+            sector_number,
+            GroupPwd::APassword,
+            [0x01, 0x02, 0x03, 0x04, 0x05, 0x06],
+        );
+        assert_eq!(driver.get_command(), &testing_data);
     }
 }
